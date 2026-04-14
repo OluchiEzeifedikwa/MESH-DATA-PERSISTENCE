@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { v7 as uuidv7 } from 'uuid';
-import { findByName, create } from '../repositories/profileRepository.js';
+import { findByName, findById, findAll, create, deleteById } from '../repositories/profileRepository.js';
 
 function classifyAgeGroup(age) {
   if (age <= 12) return 'child';
@@ -25,13 +25,13 @@ async function fetchExternalData(name) {
 
 function validateExternalData(genderData, agifyData, nationalizeData) {
   if (!genderData.gender || genderData.count === 0) {
-    return { valid: false, status: 422, message: 'Unable to determine gender for this name' };
+    return { valid: false, status: 502, message: 'Genderize returned an invalid response' };
   }
   if (agifyData.age === null || agifyData.age === undefined) {
-    return { valid: false, status: 422, message: 'Unable to determine age for this name' };
+    return { valid: false, status: 502, message: 'Agify returned an invalid response' };
   }
   if (!nationalizeData.country || nationalizeData.country.length === 0) {
-    return { valid: false, status: 422, message: 'Unable to determine nationality for this name' };
+    return { valid: false, status: 502, message: 'Nationalize returned an invalid response' };
   }
   return { valid: true };
 }
@@ -84,4 +84,28 @@ export async function createProfile(name) {
 
   const profile = await create(profileData);
   return { alreadyExists: false, profile };
+}
+
+export async function getProfileById(id) {
+  const profile = await findById(id);
+  if (!profile) {
+    const error = new Error('Profile not found');
+    error.status = 404;
+    throw error;
+  }
+  return profile;
+}
+
+export async function getProfiles(filters) {
+  return findAll(filters);
+}
+
+export async function deleteProfile(id) {
+  const profile = await findById(id);
+  if (!profile) {
+    const error = new Error('Profile not found');
+    error.status = 404;
+    throw error;
+  }
+  await deleteById(id);
 }
