@@ -13,3 +13,5 @@ app.use('/api/profiles', profilesRouter);
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
+
+export default app;
