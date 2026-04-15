@@ -62,6 +62,18 @@ The server runs on port `3000` by default.
 
 ---
 
+## Deploying to Vercel
+
+This project is configured for serverless deployment on Vercel via `api/index.js`.
+
+1. Push to GitHub and import the repo in the Vercel dashboard.
+2. Set the `DATABASE_URL` environment variable in **Project Settings → Environment Variables**.
+3. Deploy — Vercel will automatically run `npm run vercel-build` (`prisma migrate deploy && prisma generate`) before starting.
+
+All requests are rewritten to `/api/index` by `vercel.json`.
+
+---
+
 ## API Reference
 
 ### POST /api/profiles
@@ -110,8 +122,82 @@ Submitting the same name more than once does not create a new record. The existi
 
 ---
 
+### GET /api/profiles
+
+Returns all stored profiles. Supports optional query parameters to filter results.
+
+**Query Parameters**
+
+All query parameter values are **case-insensitive** (e.g. `gender=Male` and `gender=male` are treated the same).
+
+| Parameter    | Type   | Description                                                      |
+|--------------|--------|------------------------------------------------------------------|
+| `gender`     | string | Filter by gender (e.g. `male`, `female`)                        |
+| `country_id` | string | Filter by country code (e.g. `US`, `NG`)                        |
+| `age_group`  | string | Filter by age group (`child`, `teenager`, `adult`, `senior`)    |
+
+**Success Response — 200 OK**
+
+```json
+{
+  "status": "success",
+  "count": 2,
+  "data": [ { ... }, { ... } ]
+}
+```
+
+---
+
+### GET /api/profiles/:id
+
+Returns a single profile by its UUID.
+
+**Success Response — 200 OK**
+
+```json
+{
+  "status": "success",
+  "data": {
+    "id": "019571a2-3c4d-7e1a-b9f0-2d8e4a6c1f05",
+    "name": "john",
+    ...
+  }
+}
+```
+
+**Not Found — 404**
+
+```json
+{
+  "status": "error",
+  "message": "Profile not found"
+}
+```
+
+---
+
+### DELETE /api/profiles/:id
+
+Deletes a profile by its UUID.
+
+**Success Response — 204 No Content**
+
+No response body.
+
+**Not Found — 404**
+
+```json
+{
+  "status": "error",
+  "message": "Profile not found"
+}
+```
+
+---
+
 ## Processing Rules
 
+- **Name normalization** — the input name is trimmed and lowercased before any processing or storage, so `"John"` and `"john"` resolve to the same profile
 - **Gender** — extracted from Genderize: `gender`, `gender_probability`, `count` (renamed to `sample_size`)
 - **Age** — extracted from Agify. Classified into age groups:
   - `0–12` → `child`
@@ -126,7 +212,7 @@ Submitting the same name more than once does not create a new record. The existi
 
 ## Error Responses
 
-All errors follow this structure:
+Most errors follow this structure:
 
 ```json
 {
@@ -135,14 +221,24 @@ All errors follow this structure:
 }
 ```
 
+502 errors from external API failures use a different `status` value, per spec:
+
+```json
+{
+  "status": "502",
+  "message": "<ExternalApi> returned an invalid response"
+}
+```
+
 | Scenario | Status Code |
 |---|---|
 | Missing or empty name | 400 |
 | Non-string name | 422 |
-| Genderize returns null gender or count 0 | 422 |
-| Agify returns null age | 422 |
-| Nationalize returns no country data | 422 |
+| Profile not found (GET/DELETE by ID) | 404 |
 | External API unreachable | 502 |
+| Genderize returns null gender or count 0 | 502 |
+| Agify returns null age | 502 |
+| Nationalize returns no country data | 502 |
 | Internal server error | 500 |
 
 ---
