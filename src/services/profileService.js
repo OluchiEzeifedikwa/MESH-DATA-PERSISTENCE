@@ -1,6 +1,7 @@
 import axios from 'axios';
 import { v7 as uuidv7 } from 'uuid';
-import { findByName, findById, findAll, create, deleteById } from '../repositories/profileRepository.js';
+import { findByName, findById, findAll, findCount, create, deleteById } from '../repositories/profileRepository.js';
+import { getCountryName } from '../utils/countries.js';
 
 function classifyAgeGroup(age) {
   if (age <= 12) return 'child';
@@ -39,13 +40,11 @@ function validateExternalData(genderData, agifyData, nationalizeData) {
 export async function createProfile(name) {
   const normalizedName = name.trim().toLowerCase();
 
-  // Idempotency check
   const existing = await findByName(normalizedName);
   if (existing) {
     return { alreadyExists: true, profile: existing };
   }
 
-  // Call external APIs
   let genderData, agifyData, nationalizeData;
   try {
     ({ genderData, agifyData, nationalizeData } = await fetchExternalData(normalizedName));
@@ -55,7 +54,6 @@ export async function createProfile(name) {
     throw error;
   }
 
-  // Validate API responses
   const validation = validateExternalData(genderData, agifyData, nationalizeData);
   if (!validation.valid) {
     const error = new Error(validation.message);
@@ -63,23 +61,30 @@ export async function createProfile(name) {
     throw error;
   }
 
-  // Aggregate data
-  const topCountry = nationalizeData.country.reduce(
+  // extract
+  const countries = nationalizeData.country;
+  const age = agifyData.age;
+  const gender = genderData.gender;
+  const gender_probability = genderData.probability;
+
+  // process
+  const topCountry = countries.reduce(
     (max, c) => (c.probability > max.probability ? c : max),
-    nationalizeData.country[0]
+    countries[0]
   );
+  const age_group = classifyAgeGroup(age);
+  const country_name = getCountryName(topCountry.country_id);
 
   const profileData = {
     id: uuidv7(),
     name: normalizedName,
-    gender: genderData.gender,
-    gender_probability: genderData.probability,
-    sample_size: genderData.count,
-    age: agifyData.age,
-    age_group: classifyAgeGroup(agifyData.age),
+    gender,
+    gender_probability,
+    age,
+    age_group,
     country_id: topCountry.country_id,
+    country_name,
     country_probability: topCountry.probability,
-    created_at: new Date().toISOString().replace(/\.\d{3}Z$/, 'Z'),
   };
 
   const profile = await create(profileData);
@@ -96,8 +101,12 @@ export async function getProfileById(id) {
   return profile;
 }
 
-export async function getProfiles(filters) {
-  return findAll(filters);
+export async function getProfiles(options) {
+  const [profiles, total] = await Promise.all([
+    findAll(options),
+    findCount(options.filters),
+  ]);
+  return { profiles, total };
 }
 
 export async function deleteProfile(id) {
