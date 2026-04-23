@@ -43,8 +43,7 @@ export async function createProfileHandler(req, res) {
   } catch (err) {
     const status = err.status || 500;
     const message = err.message || 'Internal server error';
-    const responseStatus = status === 502 ? '502' : 'error';
-    return res.status(status).json({ status: responseStatus, message });
+    return res.status(status).json({ status: 'error', message });
   }
 }
 
