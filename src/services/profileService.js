@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { v7 as uuidv7 } from 'uuid';
-import { findByName, findById, findAll, findCount, create, deleteById } from '../repositories/profileRepository.js';
+import { findByName, findById, findAll, findCount, create, deleteById, findAllUnpaginated } from '../repositories/profileRepository.js';
 import { getCountryName } from '../utils/countries.js';
 
 function classifyAgeGroup(age) {
@@ -117,4 +117,8 @@ export async function deleteProfile(id) {
     throw error;
   }
   await deleteById(id);
+}
+
+export async function exportAllProfiles(options) {
+  return findAllUnpaginated(options);
 }

@@ -1,4 +1,4 @@
-import { createProfile, getProfileById, getProfiles, deleteProfile } from '../services/profileService.js';
+import { createProfile, getProfileById, getProfiles, deleteProfile, exportAllProfiles } from '../services/profileService.js';
 import { parseQuery } from '../utils/queryParser.js';
 
 function formatProfile(profile) {
@@ -92,11 +92,25 @@ export async function getProfilesHandler(req, res) {
       pagination: { page: parsedPage, limit: parsedLimit },
     });
 
+    const totalPages = Math.ceil(total / parsedLimit);
+    const buildUrl = (p) => {
+      const params = new URLSearchParams(req.query);
+      params.set('page', p);
+      params.set('limit', parsedLimit);
+      return `/api/profiles?${params.toString()}`;
+    };
+
     return res.status(200).json({
       status: 'success',
       page: parsedPage,
       limit: parsedLimit,
       total,
+      total_pages: totalPages,
+      links: {
+        self: buildUrl(parsedPage),
+        next: parsedPage < totalPages ? buildUrl(parsedPage + 1) : null,
+        prev: parsedPage > 1 ? buildUrl(parsedPage - 1) : null,
+      },
       data: profiles.map(formatProfile),
     });
   } catch (err) {
@@ -129,17 +143,60 @@ export async function searchProfilesHandler(req, res) {
       pagination: { page: parsedPage, limit: parsedLimit },
     });
 
+    const totalPages = Math.ceil(total / parsedLimit);
+    const buildUrl = (p) => `/api/profiles/search?q=${encodeURIComponent(q)}&page=${p}&limit=${parsedLimit}`;
+
     return res.status(200).json({
       status: 'success',
       page: parsedPage,
       limit: parsedLimit,
       total,
+      total_pages: totalPages,
+      links: {
+        self: buildUrl(parsedPage),
+        next: parsedPage < totalPages ? buildUrl(parsedPage + 1) : null,
+        prev: parsedPage > 1 ? buildUrl(parsedPage - 1) : null,
+      },
       data: profiles.map(formatProfile),
     });
   } catch (err) {
     const status = err.status || 500;
     const message = err.message || 'Internal server error';
     return res.status(status).json({ status: 'error', message });
+  }
+}
+
+export async function exportProfilesHandler(req, res) {
+  const { gender, age_group, country_id, min_age, max_age, min_gender_probability, min_country_probability, sort_by, order } = req.query;
+
+  const ALLOWED_SORT = ['age', 'created_at', 'gender_probability'];
+  const ALLOWED_ORDER = ['asc', 'desc'];
+  if (sort_by && !ALLOWED_SORT.includes(sort_by)) {
+    return res.status(400).json({ status: 'error', message: 'Invalid query parameters' });
+  }
+  if (order && !ALLOWED_ORDER.includes(order)) {
+    return res.status(400).json({ status: 'error', message: 'Invalid query parameters' });
+  }
+
+  try {
+    const profiles = await exportAllProfiles({
+      filters: { gender, age_group, country_id, min_age, max_age, min_gender_probability, min_country_probability },
+      sort: { sort_by, order },
+    });
+
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const filename = `profiles_${timestamp}.csv`;
+    const headers = ['id', 'name', 'gender', 'gender_probability', 'age', 'age_group', 'country_id', 'country_name', 'country_probability', 'created_at'];
+    const rows = profiles.map(p => {
+      const f = formatProfile(p);
+      return headers.map(h => `"${String(f[h] ?? '').replace(/"/g, '""')}"`).join(',');
+    });
+
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    return res.status(200).send([headers.join(','), ...rows].join('\n'));
+  } catch (err) {
+    return res.status(500).json({ status: 'error', message: 'Failed to export profiles' });
   }
 }
 

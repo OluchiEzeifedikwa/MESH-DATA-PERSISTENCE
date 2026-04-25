@@ -67,3 +67,10 @@ export async function create(profileData) {
 export async function deleteById(id) {
   return prisma.profile.delete({ where: { id } });
 }
+
+export async function findAllUnpaginated({ filters = {}, sort = {} } = {}) {
+  const where = buildWhere(filters);
+  const sortField = ALLOWED_SORT_FIELDS.includes(sort.sort_by) ? sort.sort_by : 'created_at';
+  const sortOrder = ALLOWED_ORDERS.includes(sort.order) ? sort.order : 'asc';
+  return prisma.profile.findMany({ where, orderBy: { [sortField]: sortOrder } });
+}

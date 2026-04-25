@@ -26,3 +26,42 @@ model Profile {
   @@index([gender_probability])
   @@map("profiles")
 }
+
+model User {
+  id            String         @id @db.Uuid
+  github_id     String         @unique
+  username      String
+  email         String?
+  avatar_url    String?
+  role          String         @default("analyst")
+  is_active     Boolean        @default(true)
+  last_login_at DateTime?
+  created_at    DateTime       @default(now())
+
+  refresh_tokens RefreshToken[]
+
+  @@map("users")
+}
+
+model RefreshToken {
+  id         String   @id @db.Uuid
+  user_id    String   @db.Uuid
+  token      String   @unique
+  expires_at DateTime
+  created_at DateTime @default(now())
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@map("refresh_tokens")
+}
+
+model OAuthState {
+  state                 String   @id
+  code_challenge        String?
+  code_challenge_method String?
+  redirect_uri          String?
+  expires_at            DateTime
+  created_at            DateTime @default(now())
+
+  @@map("oauth_states")
+}
