@@ -1,4 +1,4 @@
-import { initiateOAuth, handleWebCallback, handleCliToken, refreshTokens, logout } from '../services/authService.js';
+import { initiateOAuth, handleWebCallback, handleCliToken, refreshTokens, logout, peekOAuthState } from '../services/authService.js';
 import { findUserById } from '../repositories/userRepository.js';
 
 const COOKIE_OPTS = { httpOnly: true, secure: true, sameSite: 'lax' };
@@ -20,7 +20,11 @@ export async function githubCallbackHandler(req, res) {
     return res.status(400).json({ status: 'error', message: 'Missing code or state' });
   }
   try {
-    const { user, accessToken, refreshToken } = await handleWebCallback(code, state);
+    const oauthState = await peekOAuthState(state);
+    if (oauthState?.redirect_uri) {
+      return res.redirect(`${oauthState.redirect_uri}?code=${code}&state=${state}`);
+    }
+    const { accessToken, refreshToken } = await handleWebCallback(code, state);
     const csrfToken = (await import('crypto')).default.randomBytes(16).toString('hex');
     res.cookie('access_token', accessToken, { ...COOKIE_OPTS, maxAge: 3 * 60 * 1000 });
     res.cookie('refresh_token', refreshToken, { ...COOKIE_OPTS, maxAge: 5 * 60 * 1000 });
