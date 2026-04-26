@@ -28,7 +28,7 @@ export async function githubCallbackHandler(req, res) {
     const csrfToken = (await import('crypto')).default.randomBytes(16).toString('hex');
     res.cookie('access_token', accessToken, { ...COOKIE_OPTS, maxAge: 3 * 60 * 1000 });
     res.cookie('refresh_token', refreshToken, { ...COOKIE_OPTS, maxAge: 5 * 60 * 1000 });
-    res.cookie('csrf_token', csrfToken, { httpOnly: false, secure: true, sameSite: 'lax', maxAge: 5 * 60 * 1000 });
+    res.cookie('csrf_token', csrfToken, { httpOnly: false, secure: true, sameSite: 'none', maxAge: 5 * 60 * 1000 });
     const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
     return res.redirect(`${frontendUrl}/dashboard`);
   } catch (err) {
@@ -104,6 +104,6 @@ export async function meHandler(req, res) {
 export async function csrfTokenHandler(req, res) {
   const crypto = (await import('crypto')).default;
   const csrfToken = crypto.randomBytes(16).toString('hex');
-  res.cookie('csrf_token', csrfToken, { httpOnly: false, secure: true, sameSite: 'lax', maxAge: 5 * 60 * 1000 });
+  res.cookie('csrf_token', csrfToken, { httpOnly: false, secure: true, sameSite: 'none', maxAge: 5 * 60 * 1000 });
   return res.json({ status: 'success', csrf_token: csrfToken });
 }
