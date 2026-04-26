@@ -1,7 +1,7 @@
 import { initiateOAuth, handleWebCallback, handleCliToken, refreshTokens, logout, peekOAuthState } from '../services/authService.js';
 import { findUserById } from '../repositories/userRepository.js';
 
-const COOKIE_OPTS = { httpOnly: true, secure: true, sameSite: 'lax' };
+const COOKIE_OPTS = { httpOnly: true, secure: true, sameSite: 'none' };
 
 export async function githubAuthHandler(req, res) {
   try {
