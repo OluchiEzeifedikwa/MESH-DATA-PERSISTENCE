@@ -1,6 +1,18 @@
-# Mesh Data Persistence
+# Insighta Labs — Backend
 
-A REST API that accepts a name, fetches data from three external APIs (Genderize, Agify, Nationalize), aggregates and classifies the results, and stores the profile in a PostgreSQL database. Stage 2 adds advanced filtering, sorting, pagination, and a natural language search endpoint.
+A secure REST API for the Insighta Labs platform. Handles GitHub OAuth authentication, role-based access control, demographic profile management, and serves both the CLI tool and web portal.
+
+---
+
+## System Architecture
+
+The platform is split into three repositories:
+
+- **Backend** (this repo) — Express.js API, PostgreSQL via Prisma, deployed on Vercel
+- **CLI** — Globally installable terminal tool
+- **Web Portal** — Browser-based interface
+
+All interfaces share this backend as a single source of truth.
 
 ---
 
@@ -9,150 +21,93 @@ A REST API that accepts a name, fetches data from three external APIs (Genderize
 - **Runtime:** Node.js (>=18)
 - **Framework:** Express
 - **Database:** PostgreSQL via Prisma ORM
+- **Auth:** GitHub OAuth with PKCE, JWT (access + refresh tokens)
 - **External APIs:** Genderize, Agify, Nationalize
+- **Deployment:** Vercel
 
 ---
 
-## Getting Started
+## Authentication Flow
 
-### 1. Clone the repository
+### CLI Flow (PKCE)
 
-```bash
-git clone https://github.com/OluchiEzeifedikwa/MESH-DATA-PERSISTENCE
-cd mesh-data-persistence
-```
+1. CLI generates `code_verifier` and derives `code_challenge` (SHA-256)
+2. CLI calls `GET /auth/github` with `code_challenge` and `redirect_uri` (localhost)
+3. Backend stores the state with `code_challenge` and `redirect_uri`, builds GitHub OAuth URL using the backend callback URL
+4. User authenticates on GitHub
+5. GitHub redirects to `GET /auth/github/callback` on the backend
+6. Backend detects CLI flow (via stored `redirect_uri`) and redirects browser to CLI's localhost server with the `code` and `state`
+7. CLI sends `code`, `state`, and `code_verifier` to `POST /auth/github/token`
+8. Backend verifies PKCE, exchanges code with GitHub, upserts user, issues tokens
+9. CLI stores tokens at `~/.insighta/credentials.json`
 
-### 2. Install dependencies
+### Web Flow
 
-```bash
-npm install
-```
-
-### 3. Set up environment variables
-
-Create a `.env` file in the root of the project:
-
-```env
-DATABASE_URL="postgresql://USER:PASSWORD@HOST:PORT/DATABASE?sslmode=require"
-```
-
-### 4. Run database migrations
-
-```bash
-npx prisma migrate deploy
-```
-
-### 5. Generate Prisma Client
-
-```bash
-npx prisma generate
-```
-
-### 6. Seed the database
-
-Place the seed file at `data/profiles.json`, then run:
-
-```bash
-npm run seed
-```
-
-Re-running the seed will skip duplicate records automatically.
-
-### 7. Start the server
-
-```bash
-# Production
-npm start
-
-# Development (with auto-restart)
-npm run dev
-```
-
-The server runs on port `3000` by default.
+1. User clicks "Continue with GitHub"
+2. Browser is redirected to `GET /auth/github`
+3. GitHub redirects to `GET /auth/github/callback`
+4. Backend exchanges code, upserts user, sets HTTP-only cookies
+5. Browser is redirected to the frontend dashboard
 
 ---
 
-## Deploying to Vercel
+## Token Handling
 
-This project is configured for serverless deployment on Vercel via `api/index.js`.
+| Token | Expiry | Storage |
+|---|---|---|
+| Access token | 3 minutes | CLI: `~/.insighta/credentials.json` / Web: HTTP-only cookie |
+| Refresh token | 5 minutes | CLI: `~/.insighta/credentials.json` / Web: HTTP-only cookie |
 
-1. Push to GitHub and import the repo in the Vercel dashboard.
-2. Set the `DATABASE_URL` environment variable in **Project Settings → Environment Variables**.
-3. Deploy — Vercel will automatically run `npm run vercel-build` (`prisma migrate deploy && prisma generate`) before starting.
+- Each refresh issues a new access + refresh token pair
+- The old refresh token is invalidated immediately on use
+- Refresh tokens are stored in the database and validated server-side
 
-All requests are rewritten to `/api/index` by `vercel.json`.
+---
+
+## Role Enforcement
+
+Two roles are supported:
+
+| Role | Permissions |
+|---|---|
+| `admin` | Create profiles, delete profiles, list, search, export |
+| `analyst` | List, search, export profiles (read-only) |
+
+- Default role on signup: `analyst`
+- Role is embedded in the JWT and enforced via `requireRole` middleware on every protected route
+- Inactive users (`is_active: false`) receive `403 Forbidden` on all requests
 
 ---
 
 ## API Reference
 
-### POST /api/profiles
+### Auth Endpoints
 
-Creates a new profile by aggregating data from Genderize, Agify, and Nationalize.
-
-**Request Body**
-
-```json
-{ "name": "john" }
-```
-
-**Success Response — 201 Created**
-
-```json
-{
-  "status": "success",
-  "data": {
-    "id": "019571a2-3c4d-7e1a-b9f0-2d8e4a6c1f05",
-    "name": "john",
-    "gender": "male",
-    "gender_probability": 0.99,
-    "age": 38,
-    "age_group": "adult",
-    "country_id": "US",
-    "country_name": "United States",
-    "country_probability": 0.85,
-    "created_at": "2026-04-14T10:00:00Z"
-  }
-}
-```
-
-**Idempotency — 200 OK**
-
-Submitting the same name more than once returns the existing profile.
-
-```json
-{
-  "status": "success",
-  "message": "Profile already exists",
-  "data": { ... }
-}
-```
-
----
-
-### GET /api/profiles
-
-Returns profiles with filtering, sorting, and pagination.
-
-**Query Parameters**
-
-All filter values are case-insensitive.
-
-| Parameter | Type | Description |
+| Method | Endpoint | Description |
 |---|---|---|
-| `gender` | string | `male` or `female` |
-| `age_group` | string | `child`, `teenager`, `adult`, `senior` |
-| `country_id` | string | ISO country code e.g. `NG`, `US` |
-| `min_age` | number | Minimum age (inclusive) |
-| `max_age` | number | Maximum age (inclusive) |
-| `min_gender_probability` | number | Minimum gender probability (0–1) |
-| `min_country_probability` | number | Minimum country probability (0–1) |
-| `sort_by` | string | `age`, `created_at`, or `gender_probability` |
-| `order` | string | `asc` or `desc` (default: `asc`) |
-| `page` | number | Page number (default: `1`) |
-| `limit` | number | Results per page (default: `10`, max: `50`) |
+| GET | `/auth/github` | Initiate GitHub OAuth |
+| GET | `/auth/github/callback` | GitHub OAuth callback |
+| POST | `/auth/github/token` | Exchange code for tokens (CLI) |
+| POST | `/auth/refresh` | Refresh access token |
+| POST | `/auth/logout` | Invalidate refresh token |
+| GET | `/auth/me` | Get current user |
 
-**Success Response — 200 OK**
+### Profile Endpoints
+
+All profile endpoints require:
+- `Authorization: Bearer <token>` header
+- `X-API-Version: 1` header
+
+| Method | Endpoint | Role | Description |
+|---|---|---|---|
+| GET | `/api/profiles` | admin, analyst | List profiles with filters |
+| GET | `/api/profiles/search` | admin, analyst | Natural language search |
+| GET | `/api/profiles/export` | admin, analyst | Export profiles as CSV |
+| GET | `/api/profiles/:id` | admin, analyst | Get profile by ID |
+| POST | `/api/profiles` | admin | Create a profile |
+| DELETE | `/api/profiles/:id` | admin | Delete a profile |
+
+### Pagination Shape
 
 ```json
 {
@@ -160,181 +115,81 @@ All filter values are case-insensitive.
   "page": 1,
   "limit": 10,
   "total": 2026,
-  "data": [ { ... } ]
+  "total_pages": 203,
+  "links": {
+    "self": "/api/profiles?page=1&limit=10",
+    "next": "/api/profiles?page=2&limit=10",
+    "prev": null
+  },
+  "data": []
 }
 ```
 
 ---
 
-### GET /api/profiles/search
+## Rate Limiting
 
-Natural language query endpoint. Parses a plain English query string into filters.
+| Scope | Limit |
+|---|---|
+| Auth endpoints (`/auth/*`) | 10 requests / minute |
+| All other endpoints | 60 requests / minute per user |
 
-**Query Parameters**
-
-| Parameter | Type | Description |
-|---|---|---|
-| `q` | string | Plain English query |
-| `page` | number | Page number (default: `1`) |
-| `limit` | number | Results per page (default: `10`, max: `50`) |
-
-**Example**
-
-```
-GET /api/profiles/search?q=young males from nigeria
-```
-
-**Success Response — 200 OK** — same structure as GET /api/profiles.
-
-**Uninterpretable query — 400**
-
-```json
-{ "status": "error", "message": "Unable to interpret query" }
-```
+Returns `429 Too Many Requests` when exceeded.
 
 ---
 
-### GET /api/profiles/:id
+## Request Logging
 
-Returns a single profile by its UUID.
-
-**Success Response — 200 OK** / **404 Not Found**
-
----
-
-### DELETE /api/profiles/:id
-
-Deletes a profile by UUID. Returns **204 No Content** on success, **404** if not found.
+Every request logs: method, endpoint, status code, and response time.
 
 ---
 
 ## Natural Language Parsing
 
-### How it works
-
-The `/api/profiles/search` endpoint uses a rule-based parser — no AI or LLMs. The query string is lowercased and matched against a set of regex patterns to extract filters.
-
-### Supported keywords and mappings
-
-**Gender**
-
-| Keyword | Maps to |
-|---|---|
-| male, males, men, man, boy, boys | `gender=male` |
-| female, females, women, woman, girl, girls | `gender=female` |
-| both genders mentioned | no gender filter applied |
-
-**Age groups**
-
-| Keyword | Maps to |
-|---|---|
-| child, children, kids | `age_group=child` |
-| teenager, teenagers, teen, teens | `age_group=teenager` |
-| adult, adults | `age_group=adult` |
-| senior, seniors, elderly | `age_group=senior` |
-
-**Age ranges**
-
-| Pattern | Maps to |
-|---|---|
-| young | `min_age=16`, `max_age=24` (parsing only, not a stored group) |
-| above N / over N / older than N | `min_age=N` |
-| below N / under N / younger than N | `max_age=N` |
-| between N and M | `min_age=N`, `max_age=M` |
-| aged N / age N | `min_age=N`, `max_age=N` |
-
-**Country**
-
-| Pattern | Maps to |
-|---|---|
-| from [country name] | `country_id=[ISO code]` |
-
-Examples: `from nigeria` → `NG`, `from kenya` → `KE`, `from angola` → `AO`
-
-### Example query mappings
+The `/api/profiles/search?q=` endpoint uses a rule-based parser:
 
 | Query | Filters applied |
 |---|---|
 | `young males` | `gender=male`, `min_age=16`, `max_age=24` |
 | `females above 30` | `gender=female`, `min_age=30` |
-| `people from angola` | `country_id=AO` |
+| `people from nigeria` | `country_id=NG` |
 | `adult males from kenya` | `gender=male`, `age_group=adult`, `country_id=KE` |
-| `male and female teenagers above 17` | `age_group=teenager`, `min_age=17` |
 
-### Limitations
-
-- **Country matching is exact name only** — partial names, adjectives, or demonyms are not supported (e.g. `"Nigerian"` or `"Nigerians"` will not match — use `"from nigeria"`)
-- **No synonym resolution** — `"elderly"` maps to `senior` but `"old people"` does not
-- **"young" overrides age range filters** — if `young` appears with `above N`, the `above N` takes precedence for `min_age`
-- **Multi-country queries not supported** — `"from nigeria or ghana"` will not parse correctly
-- **Spelling errors not handled** — `"malle"` or `"femal"` will not match
-- **Queries with no recognisable keyword return 400** — `"show me everyone"` cannot be interpreted
+Supported keywords:
+- **Gender:** male, female, men, women, boy, girl
+- **Age group:** child, teenager, adult, senior, elderly
+- **Age range:** young, above N, below N, between N and M
+- **Country:** `from [country name]`
 
 ---
 
-## Processing Rules
+## Environment Variables
 
-- **Name normalization** — trimmed and lowercased before storage; `"John"` and `"john"` are the same profile
-- **Gender** — from Genderize: `gender`, `gender_probability`
-- **Age** — from Agify, classified into age groups: `0–12` → `child`, `13–19` → `teenager`, `20–59` → `adult`, `60+` → `senior`
-- **Nationality** — from Nationalize, highest-probability country used as `country_id`; `country_name` resolved from ISO code
-- **ID** — UUID v7 (time-ordered)
-- **Timestamp** — auto-generated by database, returned as UTC ISO 8601
-
----
-
-## Error Responses
-
-Most errors:
-```json
-{ "status": "error", "message": "<error message>" }
-```
-
-502 errors from external API failures:
-```json
-{ "status": "502", "message": "<ExternalApi> returned an invalid response" }
-```
-
-| Scenario | Status Code |
-|---|---|
-| Missing or empty name | 400 |
-| Invalid query parameters | 400 |
-| Unable to interpret NL query | 400 |
-| Non-string name | 422 |
-| Profile not found | 404 |
-| External API unreachable | 502 |
-| Genderize returns null gender or count 0 | 502 |
-| Agify returns null age | 502 |
-| Nationalize returns no country data | 502 |
-| Internal server error | 500 |
-
----
-
-## Database Schema
-
-```prisma
-model Profile {
-  id                  String   @id
-  name                String   @unique
-  gender              String
-  gender_probability  Float
-  age                 Int
-  age_group           String
-  country_id          String
-  country_name        String
-  country_probability Float
-  created_at          DateTime @default(now())
-
-  @@map("profiles")
-}
+```env
+DATABASE_URL=
+GITHUB_CLIENT_ID=
+GITHUB_CLIENT_SECRET=
+JWT_SECRET=
+BACKEND_URL=
+FRONTEND_URL=
 ```
 
 ---
 
-## CORS
+## Getting Started
 
-All responses include the header:
+```bash
+git clone https://github.com/OluchiEzeifedikwa/MESH-DATA-PERSISTENCE
+cd MESH-DATA-PERSISTENCE
+npm install
+cp .env.example .env  # fill in your values
+npx prisma migrate deploy
+npx prisma generate
+npm run dev
+```
 
-```
-Access-Control-Allow-Origin: *
-```
+---
+
+## Deployment
+
+Deployed on Vercel. On every push to `main`, Vercel runs `prisma migrate deploy && prisma generate` then starts the server via `api/index.js`.
