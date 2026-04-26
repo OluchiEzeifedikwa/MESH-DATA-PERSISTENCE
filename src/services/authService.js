@@ -35,7 +35,7 @@ function buildGithubUrl(state, redirectUri) {
 
 export async function initiateOAuth(codeChallenge, redirectUri) {
   const state = crypto.randomBytes(16).toString('hex');
-  const callbackUrl = redirectUri || `${process.env.BACKEND_URL}/auth/github/callback`;
+  const callbackUrl = `${process.env.BACKEND_URL}/auth/github/callback`;
   await createOAuthState({
     state,
     code_challenge: codeChallenge || null,
@@ -44,6 +44,10 @@ export async function initiateOAuth(codeChallenge, redirectUri) {
     expires_at: new Date(Date.now() + 10 * 60 * 1000),
   });
   return { state, url: buildGithubUrl(state, callbackUrl) };
+}
+
+export async function peekOAuthState(state) {
+  return findOAuthState(state);
 }
 
 async function exchangeCodeWithGithub(code, redirectUri) {
@@ -106,7 +110,7 @@ async function issueTokens(user) {
 }
 
 export async function handleWebCallback(code, state) {
-  const oauthState = await resolveOAuthState(state);
+  await resolveOAuthState(state);
   const redirectUri = `${process.env.BACKEND_URL}/auth/github/callback`;
   const githubToken = await exchangeCodeWithGithub(code, redirectUri);
   const githubUser = await fetchGithubUser(githubToken);
@@ -122,7 +126,7 @@ export async function handleCliToken(code, state, codeVerifier) {
       const e = new Error('Invalid code verifier'); e.status = 400; throw e;
     }
   }
-  const redirectUri = oauthState.redirect_uri || `${process.env.BACKEND_URL}/auth/github/callback`;
+  const redirectUri = `${process.env.BACKEND_URL}/auth/github/callback`;
   const githubToken = await exchangeCodeWithGithub(code, redirectUri);
   const githubUser = await fetchGithubUser(githubToken);
   const user = await upsertUser(githubUser);
