@@ -29,7 +29,7 @@ export async function githubCallbackHandler(req, res) {
     res.cookie('access_token', accessToken, { ...COOKIE_OPTS, maxAge: 3 * 60 * 1000 });
     res.cookie('refresh_token', refreshToken, { ...COOKIE_OPTS, maxAge: 5 * 60 * 1000 });
     res.cookie('csrf_token', csrfToken, { httpOnly: false, secure: true, sameSite: 'none', maxAge: 5 * 60 * 1000 });
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    const frontendUrl = process.env.FRONTEND_URL;
     return res.redirect(`${frontendUrl}/dashboard`);
   } catch (err) {
     return res.status(err.status || 500).json({ status: 'error', message: err.message });
