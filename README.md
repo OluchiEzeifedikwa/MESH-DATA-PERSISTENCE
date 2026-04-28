@@ -97,6 +97,7 @@ Two roles are supported:
 | POST | `/auth/github/token` | Exchange code for tokens (CLI) |
 | POST | `/auth/refresh` | Refresh access token |
 | POST | `/auth/logout` | Invalidate refresh token |
+| GET | `/auth/csrf-token` | Issue a CSRF token (web portal) |
 | GET | `/auth/me` | Get current user |
 
 ### Profile Endpoints
