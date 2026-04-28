@@ -28,6 +28,9 @@ jobs:
       - name: Check for syntax errors
         run: node --check server.js src/**/*.js
 
+      - name: Lint
+        run: npm run lint
+
   deploy:
     needs: lint-and-build
     runs-on: ubuntu-latest
