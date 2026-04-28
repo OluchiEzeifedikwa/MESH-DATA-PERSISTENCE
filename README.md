@@ -9,8 +9,15 @@ A secure REST API for the Insighta Labs platform. Handles GitHub OAuth authentic
 The platform is split into three repositories:
 
 - **Backend** (this repo) — Express.js API, PostgreSQL via Prisma, deployed on Vercel
-- **CLI** — Globally installable terminal tool
-- **Web Portal** — Browser-based interface
+- **CLI** — https://github.com/OluchiEzeifedikwa/insighta-cli — Globally installable terminal tool
+- **Web Portal** — https://github.com/OluchiEzeifedikwa/insighta-web — Browser-based interface
+
+## Live URLs
+
+| Service | URL |
+|---|---|
+| Backend API | https://mesh-data-persistence.vercel.app |
+| Web Portal | https://insighta-web.vercel.app |
 
 All interfaces share this backend as a single source of truth.
 
