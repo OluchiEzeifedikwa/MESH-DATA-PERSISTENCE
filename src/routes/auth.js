@@ -20,6 +20,7 @@ router.get('/github/callback', githubCallbackHandler);
 router.post('/github/token', githubCliTokenHandler);
 router.post('/refresh', refreshHandler);
 router.post('/logout', logoutHandler);
+router.all('/logout', (req, res) => res.status(405).json({ status: 'error', message: 'Method not allowed' }));
 router.get('/csrf-token', csrfTokenHandler);
 router.get('/me', authenticate, meHandler);
 
