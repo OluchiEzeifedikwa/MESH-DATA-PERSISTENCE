@@ -23,13 +23,17 @@ async function generateRefreshToken(userId) {
   return token;
 }
 
-function buildGithubUrl(state, redirectUri) {
+function buildGithubUrl(state, redirectUri, codeChallenge) {
   const params = new URLSearchParams({
     client_id: process.env.GITHUB_CLIENT_ID,
     redirect_uri: redirectUri,
     scope: 'read:user user:email',
     state,
   });
+  if (codeChallenge) {
+    params.append('code_challenge', codeChallenge);
+    params.append('code_challenge_method', 'S256');
+  }
   return `https://github.com/login/oauth/authorize?${params}`;
 }
 
@@ -43,7 +47,7 @@ export async function initiateOAuth(codeChallenge, redirectUri) {
     redirect_uri: redirectUri || null,
     expires_at: new Date(Date.now() + 10 * 60 * 1000),
   });
-  return { state, url: buildGithubUrl(state, callbackUrl) };
+  return { state, url: buildGithubUrl(state, callbackUrl, codeChallenge) };
 }
 
 export async function peekOAuthState(state) {
