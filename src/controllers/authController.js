@@ -7,7 +7,7 @@ export async function githubAuthHandler(req, res) {
   try {
     const { code_challenge, redirect_uri } = req.query;
     const { state, url } = await initiateOAuth(code_challenge, redirect_uri);
-    if (code_challenge) return res.json({ status: 'success', url, state });
+    if (code_challenge && redirect_uri) return res.json({ status: 'success', url, state });
     return res.redirect(url);
   } catch (err) {
     return res.status(500).json({ status: 'error', message: 'Failed to initiate OAuth' });
