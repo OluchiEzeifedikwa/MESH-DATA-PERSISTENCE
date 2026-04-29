@@ -8,6 +8,7 @@ import { authenticate } from './src/middleware/authenticate.js';
 import { meHandler } from './src/controllers/authController.js';
 
 const app = express();
+app.set('trust proxy', 1);
 const PORT = process.env.PORT || 3000;
 
 const allowedOrigins = process.env.FRONTEND_URL
