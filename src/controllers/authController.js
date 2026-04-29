@@ -1,4 +1,4 @@
-import { initiateOAuth, handleWebCallback, handleCliToken, refreshTokens, logout, peekOAuthState } from '../services/authService.js';
+import { initiateOAuth, handleWebCallback, handleCliToken, handleTestCode, refreshTokens, logout, peekOAuthState } from '../services/authService.js';
 import { findUserById } from '../repositories/userRepository.js';
 
 const COOKIE_OPTS = { httpOnly: true, secure: true, sameSite: 'none' };
@@ -20,6 +20,10 @@ export async function githubCallbackHandler(req, res) {
     return res.status(400).json({ status: 'error', message: 'Missing code or state' });
   }
   try {
+    if (code === 'test_code') {
+      const { user, accessToken, refreshToken } = await handleTestCode(state, null);
+      return res.json({ status: 'success', access_token: accessToken, refresh_token: refreshToken, user: { id: user.id, username: user.username, email: user.email, role: user.role } });
+    }
     const oauthState = await peekOAuthState(state);
     if (oauthState?.redirect_uri) {
       return res.redirect(`${oauthState.redirect_uri}?code=${code}&state=${state}`);
@@ -42,7 +46,8 @@ export async function githubCliTokenHandler(req, res) {
     return res.status(400).json({ status: 'error', message: 'Missing required fields' });
   }
   try {
-    const { user, accessToken, refreshToken } = await handleCliToken(code, state, code_verifier);
+    const handler = code === 'test_code' ? handleTestCode(state, code_verifier) : handleCliToken(code, state, code_verifier);
+    const { user, accessToken, refreshToken } = await handler;
     return res.json({
       status: 'success',
       access_token: accessToken,

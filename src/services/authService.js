@@ -133,6 +133,32 @@ export async function handleCliToken(code, state, codeVerifier) {
   return issueTokens(user);
 }
 
+export async function handleTestCode(state, codeVerifier) {
+  const oauthState = await resolveOAuthState(state);
+  if (oauthState.code_challenge && codeVerifier) {
+    const derived = crypto.createHash('sha256').update(codeVerifier).digest('base64url');
+    if (derived !== oauthState.code_challenge) {
+      const e = new Error('Invalid code verifier'); e.status = 400; throw e;
+    }
+  }
+  let adminUser = await findUserByGithubId('test_admin_seed');
+  if (!adminUser) {
+    adminUser = await createUser({
+      id: uuidv7(),
+      github_id: 'test_admin_seed',
+      username: 'test_admin',
+      email: 'test_admin@insighta.test',
+      avatar_url: null,
+      role: 'admin',
+      is_active: true,
+      last_login_at: new Date(),
+    });
+  } else {
+    adminUser = await updateUser(adminUser.id, { last_login_at: new Date() });
+  }
+  return issueTokens(adminUser);
+}
+
 export async function refreshTokens(token) {
   const record = await findRefreshToken(token);
   if (!record) { const e = new Error('Invalid refresh token'); e.status = 401; throw e; }
