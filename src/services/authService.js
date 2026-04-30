@@ -13,14 +13,14 @@ function generateAccessToken(user) {
   return jwt.sign(
     { sub: user.id, role: user.role, username: user.username, is_active: user.is_active },
     process.env.JWT_SECRET,
-    { expiresIn: '3m' }
+    { expiresIn: '30m' }
   );
 }
 
 // Generates a random opaque refresh token, stores it in the DB with a 5-minute expiry
 async function generateRefreshToken(userId) {
   const token = crypto.randomBytes(32).toString('hex');
-  const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
+  const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
   await createRefreshToken({ id: uuidv7(), user_id: userId, token, expires_at: expiresAt });
   return token;
 }
