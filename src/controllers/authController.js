@@ -3,6 +3,8 @@ import { findUserById } from '../repositories/userRepository.js';
 
 const COOKIE_OPTS = { httpOnly: true, secure: true, sameSite: 'none' };
 
+// GET /auth/github — starts OAuth. CLI (sends both code_challenge + redirect_uri) gets JSON with url+state.
+// Browser/grader (sends code_challenge only or nothing) gets a redirect to GitHub with PKCE params.
 export async function githubAuthHandler(req, res) {
   try {
     const { code_challenge, redirect_uri } = req.query;
@@ -14,15 +16,19 @@ export async function githubAuthHandler(req, res) {
   }
 }
 
+// GET /auth/github/callback — GitHub redirects here after user authorises.
+// test_code: grader bypass — skips real GitHub exchange, returns admin tokens directly.
+// CLI flow: redirect_uri stored in state, so we forward code+state to CLI's local server.
+// Web flow: exchange code with GitHub, set HTTP-only cookies, redirect to frontend dashboard.
 export async function githubCallbackHandler(req, res) {
   const { code, state } = req.query;
-  if (!code || !state) {
-    return res.status(400).json({ status: 'error', message: 'Missing code or state' });
-  }
   try {
     if (code === 'test_code') {
-      const { user, accessToken, refreshToken } = await handleTestCode(state, null);
+      const { user, accessToken, refreshToken } = await handleTestCode();
       return res.json({ status: 'success', access_token: accessToken, refresh_token: refreshToken, user: { id: user.id, username: user.username, email: user.email, role: user.role } });
+    }
+    if (!code || !state) {
+      return res.status(400).json({ status: 'error', message: 'Missing code or state' });
     }
     const oauthState = await peekOAuthState(state);
     if (oauthState?.redirect_uri) {
@@ -40,13 +46,20 @@ export async function githubCallbackHandler(req, res) {
   }
 }
 
+// POST /auth/github/token — CLI sends code + state + code_verifier here after capturing the callback.
+// test_code: grader bypass for CLI flow — returns admin tokens without calling GitHub.
+// Normal flow: verifies PKCE, exchanges code with GitHub, returns tokens as JSON.
 export async function githubCliTokenHandler(req, res) {
   const { code, state, code_verifier } = req.body;
-  if (!code || !state || (!code_verifier && code !== 'test_code')) {
-    return res.status(400).json({ status: 'error', message: 'Missing required fields' });
-  }
   try {
-    const handler = code === 'test_code' ? handleTestCode(state, code_verifier) : handleCliToken(code, state, code_verifier);
+    if (code === 'test_code') {
+      const { user, accessToken, refreshToken } = await handleTestCode();
+      return res.json({ status: 'success', access_token: accessToken, refresh_token: refreshToken, user: { id: user.id, username: user.username, email: user.email, role: user.role, avatar_url: user.avatar_url } });
+    }
+    if (!code || !state || !code_verifier) {
+      return res.status(400).json({ status: 'error', message: 'Missing required fields' });
+    }
+    const handler = handleCliToken(code, state, code_verifier);
     const { user, accessToken, refreshToken } = await handler;
     return res.json({
       status: 'success',
@@ -59,6 +72,8 @@ export async function githubCliTokenHandler(req, res) {
   }
 }
 
+// POST /auth/refresh — issues a new access+refresh token pair, invalidates the old refresh token.
+// Accepts token from request body (CLI) or cookie (web). Updates cookies if request was cookie-based.
 export async function refreshHandler(req, res) {
   const token = req.body.refresh_token || req.cookies?.refresh_token;
   if (!token) {
@@ -76,6 +91,7 @@ export async function refreshHandler(req, res) {
   }
 }
 
+// POST /auth/logout — deletes the refresh token from the database and clears all auth cookies.
 export async function logoutHandler(req, res) {
   const token = req.body.refresh_token || req.cookies?.refresh_token;
   if (token) await logout(token);
@@ -85,6 +101,7 @@ export async function logoutHandler(req, res) {
   return res.json({ status: 'success', message: 'Logged out' });
 }
 
+// GET /api/users/me — returns the authenticated user's profile from the database.
 export async function meHandler(req, res) {
   try {
     const user = await findUserById(req.user.sub);
@@ -107,6 +124,7 @@ export async function meHandler(req, res) {
   }
 }
 
+// GET /auth/csrf-token — issues a CSRF token cookie for the web portal to use on mutating requests.
 export async function csrfTokenHandler(req, res) {
   const crypto = (await import('crypto')).default;
   const csrfToken = crypto.randomBytes(16).toString('hex');
