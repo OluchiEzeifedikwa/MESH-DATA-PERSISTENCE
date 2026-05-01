@@ -60,10 +60,12 @@ export async function peekOAuthState(state) {
 }
 
 // Exchanges the GitHub authorization code for a GitHub access token
-async function exchangeCodeWithGithub(code, redirectUri) {
+async function exchangeCodeWithGithub(code, redirectUri, codeVerifier) {
+  const body = { client_id: process.env.GITHUB_CLIENT_ID, client_secret: process.env.GITHUB_CLIENT_SECRET, code, redirect_uri: redirectUri };
+  if (codeVerifier) body.code_verifier = codeVerifier;
   const response = await axios.post(
     'https://github.com/login/oauth/access_token',
-    { client_id: process.env.GITHUB_CLIENT_ID, client_secret: process.env.GITHUB_CLIENT_SECRET, code, redirect_uri: redirectUri },
+    body,
     { headers: { Accept: 'application/json' } }
   );
   if (response.data.error) throw new Error(`GitHub OAuth error: ${response.data.error_description}`);
@@ -143,7 +145,7 @@ export async function handleCliToken(code, state, codeVerifier) {
     }
   }
   const redirectUri = `${process.env.BACKEND_URL}/auth/github/callback`;
-  const githubToken = await exchangeCodeWithGithub(code, redirectUri);
+  const githubToken = await exchangeCodeWithGithub(code, redirectUri, codeVerifier);
   const githubUser = await fetchGithubUser(githubToken);
   const user = await upsertUser(githubUser);
   return issueTokens(user);
