@@ -1,5 +1,8 @@
+import { createReadStream } from 'fs';
+import { unlink } from 'fs/promises';
 import { createProfile, getProfileById, getProfiles, deleteProfile, exportAllProfiles } from '../services/profileService.js';
 import { parseQuery } from '../utils/queryParser.js';
+import { ingestCSV } from '../services/ingestService.js';
 
 function formatProfile(profile) {
   return {
@@ -208,5 +211,19 @@ export async function deleteProfileHandler(req, res) {
     const status = err.status || 500;
     const message = err.message || 'Internal server error';
     return res.status(status).json({ status: 'error', message });
+  }
+}
+
+export async function ingestProfilesHandler(req, res) {
+  if (!req.file) {
+    return res.status(400).json({ status: 'error', message: 'CSV file is required' });
+  }
+  try {
+    const stats = await ingestCSV(createReadStream(req.file.path));
+    return res.status(200).json({ status: 'success', ...stats });
+  } catch (err) {
+    return res.status(500).json({ status: 'error', message: 'Ingestion failed' });
+  } finally {
+    await unlink(req.file.path).catch(() => {});
   }
 }

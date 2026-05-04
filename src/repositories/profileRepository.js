@@ -64,6 +64,12 @@ export async function create(profileData) {
   return prisma.profile.create({ data: profileData });
 }
 
+// Inserts multiple profiles in a single SQL statement instead of one query per row.
+// skipDuplicates: true silently ignores rows where the name already exists.
+export async function bulkCreate(profiles) {
+  return prisma.profile.createMany({ data: profiles, skipDuplicates: true });
+}
+
 export async function deleteById(id) {
   return prisma.profile.delete({ where: { id } });
 }

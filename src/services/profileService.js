@@ -2,6 +2,8 @@ import axios from 'axios';
 import { v7 as uuidv7 } from 'uuid';
 import { findByName, findById, findAll, findCount, create, deleteById, findAllUnpaginated } from '../repositories/profileRepository.js';
 import { getCountryName } from '../utils/countries.js';
+import { queryCache } from '../utils/cache.js';
+import { normalizeFilters, makeCacheKey } from '../utils/normalizeFilters.js';
 
 function classifyAgeGroup(age) {
   if (age <= 12) return 'child';
@@ -101,12 +103,23 @@ export async function getProfileById(id) {
   return profile;
 }
 
+// Normalises filters into a canonical form, checks the in-memory cache first,
+// and only queries the database on a cache miss. Result is cached for 5 minutes.
 export async function getProfiles(options) {
+  const normalized = normalizeFilters(options.filters);
+  const cacheKey = makeCacheKey(normalized, options.sort, options.pagination);
+
+  const cached = queryCache.get(cacheKey);
+  if (cached) return cached;
+
   const [profiles, total] = await Promise.all([
-    findAll(options),
-    findCount(options.filters),
+    findAll({ ...options, filters: normalized }),
+    findCount(normalized),
   ]);
-  return { profiles, total };
+
+  const result = { profiles, total };
+  queryCache.set(cacheKey, result);
+  return result;
 }
 
 export async function deleteProfile(id) {
