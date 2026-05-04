@@ -1,5 +1,15 @@
 import { getCountryCode } from './countries.js';
 
+const ADJECTIVE_TO_CODE = {
+  'nigerian': 'NG', 'ghanaian': 'GH', 'kenyan': 'KE', 'south african': 'ZA',
+  'egyptian': 'EG', 'ethiopian': 'ET', 'tanzanian': 'TZ', 'ugandan': 'UG',
+  'senegalese': 'SN', 'cameroonian': 'CM', 'rwandan': 'RW', 'zambian': 'ZM',
+  'zimbabwean': 'ZW', 'sudanese': 'SD', 'somalian': 'SO', 'liberian': 'LR',
+  'american': 'US', 'british': 'GB', 'french': 'FR', 'german': 'DE',
+  'indian': 'IN', 'chinese': 'CN', 'brazilian': 'BR', 'mexican': 'MX',
+  'canadian': 'CA', 'australian': 'AU', 'japanese': 'JP', 'korean': 'KR',
+};
+
 export function parseQuery(q) {
   const query = q.toLowerCase().trim();
   const filters = {};
@@ -44,12 +54,20 @@ export function parseQuery(q) {
     filters.max_age = parseInt(agedMatch[1]);
   }
 
-  // Country — "from [country name]"
-  const fromMatch = query.match(/\bfrom\s+([a-z][a-z\s]+?)(?:\s+(?:above|below|over|under|older|younger|aged?|who|that|with|and)|$)/);
-  if (fromMatch) {
-    const countryName = fromMatch[1].trim();
-    const code = getCountryCode(countryName);
-    if (code) filters.country_id = code;
+  // Country adjective — "Nigerian females", "South African men"
+  if (!filters.country_id) {
+    for (const [adj, code] of Object.entries(ADJECTIVE_TO_CODE)) {
+      if (query.includes(adj)) { filters.country_id = code; break; }
+    }
+  }
+
+  // Country — "from [country]" or "in [country]" or "living in [country]"
+  if (!filters.country_id) {
+    const countryMatch = query.match(/\b(?:from|in|living in|based in)\s+([a-z][a-z\s]+?)(?:\s+(?:above|below|over|under|older|younger|aged?|who|that|with|and)|$)/);
+    if (countryMatch) {
+      const code = getCountryCode(countryMatch[1].trim());
+      if (code) filters.country_id = code;
+    }
   }
 
   if (Object.keys(filters).length === 0) return null;
