@@ -113,6 +113,7 @@ All profile endpoints require:
 | GET | `/api/profiles/export` | admin, analyst | Export profiles as CSV |
 | GET | `/api/profiles/:id` | admin, analyst | Get profile by ID |
 | POST | `/api/profiles` | admin | Create a profile |
+| POST | `/api/profiles/ingest` | admin | Bulk ingest profiles from CSV |
 | DELETE | `/api/profiles/:id` | admin | Delete a profile |
 
 ### Pagination Shape
@@ -194,6 +195,114 @@ cp .env.example .env  # fill in your values
 npx prisma migrate deploy
 npx prisma generate
 npm run dev
+```
+
+---
+
+## Testing Stage 4B Features
+
+Start the local server first:
+
+```bash
+npm start
+```
+
+Ensure the CLI's `BACKEND_URL` is set to `http://localhost:3000` in the CLI's `.env` file.
+
+---
+
+### Caching
+
+**Via CLI** — run the same command twice and compare times:
+
+```bash
+time insighta profiles list --gender female --country NG
+time insighta profiles list --gender female --country NG
+```
+
+The second request is significantly faster — served from the in-memory LRU cache, no database query.
+
+**Via curl** — get a token first, then run twice:
+
+```bash
+curl -X POST http://localhost:3000/auth/github/token \
+  -H "Content-Type: application/json" \
+  -d '{"code":"test_code","state":"test","code_verifier":"test"}'
+
+TOKEN=<paste access_token here>
+
+time curl -s \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "x-api-version: 1" \
+  -H "x-csrf-token: skip" \
+  "http://localhost:3000/api/profiles?gender=female&country_id=NG&limit=10"
+
+time curl -s \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "x-api-version: 1" \
+  -H "x-csrf-token: skip" \
+  "http://localhost:3000/api/profiles?gender=female&country_id=NG&limit=10"
+```
+
+---
+
+### Query Normalization
+
+**Via CLI** — two differently phrased queries return the same total:
+
+```bash
+insighta profiles search "Nigerian females"
+insighta profiles search "women from Nigeria"
+```
+
+**Via curl:**
+
+```bash
+curl -s \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "x-api-version: 1" \
+  -H "x-csrf-token: skip" \
+  "http://localhost:3000/api/profiles/search?q=Nigerian+females"
+
+curl -s \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "x-api-version: 1" \
+  -H "x-csrf-token: skip" \
+  "http://localhost:3000/api/profiles/search?q=women+from+Nigeria"
+```
+
+**Via web portal** — go to the Search page and enter "Nigerian females", then "women from Nigeria". Both return the same total count.
+
+---
+
+### CSV Ingestion
+
+Ingestion is admin-only and available via curl. A sample file `test_ingest.csv` is included in the repo.
+
+```bash
+curl -X POST http://localhost:3000/api/profiles/ingest \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "x-api-version: 1" \
+  -H "x-csrf-token: skip" \
+  -F "file=@test_ingest.csv"
+```
+
+Expected response:
+
+```json
+{
+  "status": "success",
+  "total_rows": 4,
+  "inserted": 0,
+  "skipped": 4,
+  "reasons": {
+    "duplicate_name": 3,
+    "invalid_gender": 1,
+    "missing_fields": 0,
+    "invalid_age": 0,
+    "malformed_row": 0
+  }
+}
 ```
 
 ---
