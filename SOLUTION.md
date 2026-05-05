@@ -71,7 +71,7 @@ Without normalization, "Nigerian females between ages 20 and 45" and "Women aged
 - Created `src/services/ingestService.js` — streams and processes the CSV in batches of 500 rows
 - Added `bulkCreate` to `src/repositories/profileRepository.js` — uses `createMany` with `skipDuplicates: true`
 - Added `ingestProfilesHandler` to `src/controllers/profileController.js`
-- Added `POST /api/profiles/ingest` route (admin only) with `multer` memory storage
+- Added `POST /api/profiles/ingest` route (admin only) with `multer` disk storage
 
 ### How ingestion works
 1. File is received via multipart upload — multer writes it to a temp file on disk (not into memory)
