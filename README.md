@@ -277,9 +277,23 @@ curl -s \
 
 ### CSV Ingestion
 
-Ingestion is admin-only and available via curl. A sample file `test_ingest.csv` is included in the repo.
+Ingestion is admin-only. A sample file `test_ingest.csv` is included in the repo.
+
+**Via CLI:**
 
 ```bash
+insighta profiles ingest test_ingest.csv
+```
+
+**Via curl:**
+
+```bash
+curl -X POST http://localhost:3000/auth/github/token \
+  -H "Content-Type: application/json" \
+  -d '{"code":"test_code","state":"test","code_verifier":"test"}'
+
+TOKEN=<paste access_token here>
+
 curl -X POST http://localhost:3000/api/profiles/ingest \
   -H "Authorization: Bearer $TOKEN" \
   -H "x-api-version: 1" \
