@@ -285,6 +285,23 @@ Ingestion is admin-only. A sample file `test_ingest.csv` is included in the repo
 insighta profiles ingest test_ingest.csv
 ```
 
+To test bulk ingestion with 500 rows, generate a CSV first:
+
+```bash
+node -e "
+const rows = ['name,gender,age,country_id'];
+for (let i = 1; i <= 500; i++) {
+  rows.push(\`testbulk\${i},\${i % 2 === 0 ? 'female' : 'male'},\${20 + (i % 50)},NG\`);
+}
+require('fs').writeFileSync('bulk_test.csv', rows.join('\n'));
+console.log('Done');
+"
+
+insighta profiles ingest bulk_test.csv
+```
+
+Re-running the same file will skip all 500 rows as `duplicate_name` — this is expected. The upload is idempotent.
+
 **Via curl:**
 
 ```bash
