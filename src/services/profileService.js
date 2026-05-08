@@ -103,13 +103,11 @@ export async function getProfileById(id) {
   return profile;
 }
 
-// Normalises filters into a canonical form, checks the in-memory cache first,
-// and only queries the database on a cache miss. Result is cached for 5 minutes.
 export async function getProfiles(options) {
   const normalized = normalizeFilters(options.filters);
   const cacheKey = makeCacheKey(normalized, options.sort, options.pagination);
 
-  const cached = queryCache.get(cacheKey);
+  const cached = await queryCache.get(cacheKey);
   if (cached) return cached;
 
   const [profiles, total] = await Promise.all([
@@ -118,7 +116,7 @@ export async function getProfiles(options) {
   ]);
 
   const result = { profiles, total };
-  queryCache.set(cacheKey, result);
+  await queryCache.set(cacheKey, result);
   return result;
 }
 
